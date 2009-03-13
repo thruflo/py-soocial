@@ -1,6 +1,9 @@
+import base64
+import cookielib
 import httplib2
 import re
 import socket
+import urllib2
 import vobject
 
 from elementtree import ElementTree
@@ -21,16 +24,16 @@ class Soocial(object):
       
       Python wrapper for the Soocial developer API.
       
-          >>> myemail = 'user@domain.com'
-          >>> mypassword '******'
+          >>> myemail = 'me@foo.com'
+          >>> mypassword = '***'
           >>> soo = Soocial(myemail, mypassword)
       
-      Imagine we have a new account::
+      Let's start with an empty account::
       
           >>> len(soo)
           0
       
-      Let's add a contact::
+      Now let's add a contact::
       
           >>> id = soo.add({'first_name': 'Buddy', 'last_name': 'Holly'})
       
@@ -49,13 +52,13 @@ class Soocial(object):
       
       You can iterate through all the contacts::
       
-          >>> for item in contacts:
+          >>> for item in soo:
           ...     item['given-name']
           'Buddy'
       
       Edit name information directly::
       
-          >>> soo[id] = {'given-name': 'Charles Hardin', 'family-name': 'Holley'}
+          >>> soo[id] = {'first_name': 'Charles Hardin', 'last_name': 'Holley'}
           >>> buddy = soo[id]
           >>> buddy['given-name']
           'Charles Hardin'
@@ -70,35 +73,40 @@ class Soocial(object):
       
       Or as raw text::
       
-          >>> soo.get_all_vcards(parse=False)
-          ['BEGIN:VCARD\nVERSION:3.0\nN;CHARSET=UTF-8:Holley;Charles Hardin;;;\nFN;CHARSET=UTF-8:Charles Hardin Holley\nEND:VCARD']
-          >>> soo.get_vcard(id, parse=False)
-          'BEGIN:VCARD\nVERSION:3.0\nN;CHARSET=UTF-8:Holley;Charles Hardin;;;\nFN;CHARSET=UTF-8:Charles Hardin Holley\nEND:VCARD'
-      
+          >>> soo.get_all_vcards(parse=False) #doctest: +ELLIPSIS
+          ['BEGIN:VCARD...END:VCARD']
+          
+          >>> soo.get_vcard(id, parse=False) #doctest: +ELLIPSIS
+          'BEGIN:VCARD...END:VCARD'
       
       Contacts contain ``phone_numbers``, ``email_addresses``,
       ``organisations``, ``urls`` and ``street_addresses``::
       
           >>> soo.get_phones(id)
-          ...
+          []
+          
           >>> soo.get_emails(id)
-          ...
+          []
+          
           >>> soo.get_urls(id)
-          ...
+          []
+          
           >>> soo.get_addresses(id)
-          ...
+          []
+          
           >>> soo.get_organisations(id)
-          ...
+          []
       
       Plus there's support to get a small set of data on the existing
       user and, presumably, the phone numbers of people the user
       is connected with (?)::
       
-          >>> soo.get_user()
-          ...
+          >>> user = soo.get_user()
+          >>> user.keys()
+          ['username', 'name', 'number-of-contacts', 'updated-at', 'created-at', 'allow-newsletters', 'invites-available']
           
           >>> soo.get_connection_phones()
-          ...
+          []
       
       Atm, these are read only, until perhaps I get a little more
       info on the API, which atm doesn't work as documented
@@ -126,6 +134,8 @@ class Soocial(object):
         h.add_credentials(email, password)
         h.force_exception_to_status_code = False
         self.conn = Connection(h, uri)
+        self.email = email
+        self.password = password
     
     def __repr__(self):
         return '<%s %r>' % (type(self).__name__, self.conn.uri)
@@ -176,7 +186,7 @@ class Soocial(object):
         
         resp, data = self.conn.get('contacts.xml')
         try:
-            return len(data.contacts.contact)
+            return len(data)
         except KeyError:
             return 0
         
@@ -231,14 +241,11 @@ class Soocial(object):
           
         """
         
-        print id
-        print postdata
         path = 'contacts/%s.xml' % validate_id(id)
         data = {}
         for item in postdata:
             data['contact[%s]' % item] = postdata[item]
         postdata = urlencode(data, True)
-        print postdata
         resp, data = self.conn.put(path, content=postdata)
         return data
     
@@ -302,8 +309,26 @@ class Soocial(object):
         return data
     
     def get_user(self):
-        resp, data = self.conn.get('user.xml')
-        return data
+        """
+          
+          Special case: requires cookie based authentication.
+          
+          
+        """
+        
+        raw = "%s:%s" % (self.email, self.password)
+        auth = base64.encodestring(raw).strip()
+        headers = {'AUTHORIZATION': 'Basic %s' % auth}
+        opener = urllib2.build_opener(
+            urllib2.HTTPCookieProcessor(
+                cookielib.LWPCookieJar()
+            )
+        )
+        url = '%s/user.xml' % DEFAULT_URI
+        request = urllib2.Request(url, headers=headers)
+        sock = opener.open(request)
+        xml = ElementTree.fromstring(sock.read())
+        return XmlDictParser(xml)
     
     def get_connection_phones(self):
         resp, data = self.conn.get('/connections/phones.xml')
@@ -375,8 +400,6 @@ class Connection(object):
         self.uri = uri
     
     def get(self, path, headers=None, **params):
-        print 'get'
-        print 'path: %s' % path
         return self._request('GET', path, headers=headers, **params)
     
     def post(self, path, content=None, headers=None, **params):
@@ -411,7 +434,6 @@ class Connection(object):
                     path, 
                     **params
                 )
-                print url
                 return self.http.request(
                     url,
                     method,
@@ -534,7 +556,6 @@ def validate_id(id):
     return id
 
 
-
 if __name__ == '__main__':
     import sys
     email = sys.args[0]
@@ -542,4 +563,5 @@ if __name__ == '__main__':
     soo = Soocial(email, password)
     for item in soo:
         print item
+    
 

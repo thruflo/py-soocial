@@ -19,31 +19,26 @@ class XmlListParser(list):
 
 
 class XmlDictParser(dict):
-    '''
+    """
       
-      Example usage:
+      Example usage::
+          
+          >>> from elementtree import ElementTree
+          >>> root = ElementTree.fromstring('<root><a /><b /><c /></root>')
+          >>> xmldict = XmlDictParser(root)
+          {'a': None, 'c': None, 'b': None}
+          
+      And then use xmldict for what it is... a dict.  There's some
+      rather shakey assumptions in here but it works for the
+      Soocial output.
+            
       
-      >>> tree = ElementTree.parse('your_file.xml')
-      >>> root = tree.getroot()
-      >>> xmldict = XmlDictParser(root)
-      
-      Or, if you want to use an XML string:
-      
-      >>> root = ElementTree.XML(xml_string)
-      >>> xmldict = XmlDictParser(root)
-      
-      And then use xmldict for what it is... a dict.
-      
-      
-    '''
+    """
     
     def __init__(self, parent_element):
-        print self.items()
         if parent_element.items():
             self.update(dict(parent_element.items()))
-        print self.items()
         for element in parent_element:
-            print element
             if element:
                 # treat like dict - we assume that if the first two tags
                 # in a series are different, then they are all different.
