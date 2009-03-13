@@ -11,7 +11,7 @@ setup(
     long_description = long_description,
     author = 'thruflo',
     author_email = 'thruflo@googlemail.com',
-    url = 'http://thruflo.github.com',
+    url = 'http://github.com/thruflo/py-soocial/tree/master',
     classifiers = [
         'Development Status :: 3 - Alpha',
         'Environment :: Web Environment',
