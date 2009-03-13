@@ -16,6 +16,10 @@ setup(
     dependency_links = [
         'http://pypi.python.org/simple'
     ],
-    install_requires = [],
+    install_requires = [
+        'simplejson',
+        'httplib2',
+        'ElementTree'
+    ],
     entry_points = {}
 )
