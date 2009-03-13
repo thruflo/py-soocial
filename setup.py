@@ -12,6 +12,14 @@ setup(
     author = 'thruflo',
     author_email = 'thruflo@googlemail.com',
     url = 'http://thruflo.github.com',
+    classifiers = [
+        'Development Status :: 3 - Alpha',
+        'Environment :: Web Environment',
+        'Intended Audience :: Developers',
+        'License :: Public Domain',
+        'Programming Language :: Python'
+    ],
+    license = 'Public Domain',
     packages = find_packages('src'),
     package_dir = {
         '': 'src'
