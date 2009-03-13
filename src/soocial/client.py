@@ -1,6 +1,7 @@
 import httplib2
 import re
 import socket
+import vobject
 
 from elementtree import ElementTree
 from urllib import quote, urlencode
@@ -18,15 +19,11 @@ DEFAULT_URI = u'https://www.soocial.com'
 class Soocial(object):
     """
       
-      Provides the Soocial developer API.
+      Python wrapper for the Soocial developer API.
       
-      Requires your Soocial email and password (the class takes
-      care of quoting them, so you can pass user@domain.com, instead
-      of user%40domain.com)::
-          
-          >>> email = 'user@domain.com'
-          >>> password '******'
-          >>> soo = Soocial(email, password)
+          >>> myemail = 'user@domain.com'
+          >>> mypassword '******'
+          >>> soo = Soocial(myemail, mypassword)
       
       Imagine we have a new account::
       
@@ -34,7 +31,7 @@ class Soocial(object):
           0
       
       Let's add a contact::
-          
+      
           >>> id = soo.add({'first_name': 'Buddy', 'last_name': 'Holly'})
       
       The contact id is a string representing an integer::
@@ -51,25 +48,60 @@ class Soocial(object):
           ['addresses', 'urls', 'family-name', 'deleted', 'organisations', 'updated-at', 'created-at', 'emails', 'id', 'given-name', 'parents', 'telephones', 'vcard', 'similarity-matrix', 'user-id', 'created-by', 'g-name-for-sorting', 'latest']
       
       You can iterate through all the contacts::
-          
+      
           >>> for item in contacts:
           ...     item['given-name']
           'Buddy'
       
-      You can edit name information directly::
+      Edit name information directly::
       
           >>> soo[id] = {'given-name': 'Charles Hardin', 'family-name': 'Holley'}
           >>> buddy = soo[id]
           >>> buddy['given-name']
           'Charles Hardin'
       
-      Atm I'm not sure what other attributes are allowable on a contact.
-      However, contents can *contain* ``phone_numbers``, ``email_addresses``,
-      ``organisations``, ``urls`` and ``street_addresses``.
+      You can also get data in vcard format.  Either parsed into a
+      Python representation using the vobject library::
       
-      TODO: MORE!
+          >>> soo.get_all_vcards()
+          [<VCARD| [<VERSION{}3.0>, <FN{u'CHARSET': [u'UTF-8']}Charles Hardin Holley>, <N{u'CHARSET': [u'UTF-8']} Charles Hardin  Holley >]>]
+          >>> soo.get_vcard(id)
+          <VCARD| [<VERSION{}3.0>, <FN{u'CHARSET': [u'UTF-8']}Charles Hardin Holley>, <N{u'CHARSET': [u'UTF-8']} Charles Hardin  Holley >]>
+      
+      Or as raw text::
+      
+          >>> soo.get_all_vcards(parse=False)
+          ['BEGIN:VCARD\nVERSION:3.0\nN;CHARSET=UTF-8:Holley;Charles Hardin;;;\nFN;CHARSET=UTF-8:Charles Hardin Holley\nEND:VCARD']
+          >>> soo.get_vcard(id, parse=False)
+          'BEGIN:VCARD\nVERSION:3.0\nN;CHARSET=UTF-8:Holley;Charles Hardin;;;\nFN;CHARSET=UTF-8:Charles Hardin Holley\nEND:VCARD'
       
       
+      Contacts contain ``phone_numbers``, ``email_addresses``,
+      ``organisations``, ``urls`` and ``street_addresses``::
+      
+          >>> soo.get_phones(id)
+          ...
+          >>> soo.get_emails(id)
+          ...
+          >>> soo.get_urls(id)
+          ...
+          >>> soo.get_addresses(id)
+          ...
+          >>> soo.get_organisations(id)
+          ...
+      
+      Plus there's support to get a small set of data on the existing
+      user and, presumably, the phone numbers of people the user
+      is connected with (?)::
+      
+          >>> soo.get_user()
+          ...
+          
+          >>> soo.get_connection_phones()
+          ...
+      
+      Atm, these are read only, until perhaps I get a little more
+      info on the API, which atm doesn't work as documented
       
       
     """
@@ -95,6 +127,8 @@ class Soocial(object):
         h.force_exception_to_status_code = False
         self.conn = Connection(h, uri)
     
+    def __repr__(self):
+        return '<%s %r>' % (type(self).__name__, self.conn.uri)
     
     def __contains__(self, id):
         """
@@ -118,7 +152,6 @@ class Soocial(object):
             return False
         
     
-    
     def __iter__(self):
         """
           
@@ -132,7 +165,6 @@ class Soocial(object):
             return iter(data) # ['contacts']['contact'])
         except KeyError:
             return iter({})
-    
     
     def __len__(self):
         """
@@ -148,7 +180,6 @@ class Soocial(object):
         except KeyError:
             return 0
         
-    
     
     def __nonzero__(self):
         """
@@ -166,26 +197,6 @@ class Soocial(object):
         except:
             return False
         
-    
-    
-    def __repr__(self):
-        return '<%s %r>' % (type(self).__name__, self.conn.uri)
-    
-    
-    def __delitem__(self, id):
-        """
-        
-          Remove the contact with the specified id.
-          
-          :param id: the id of the contact
-          :raise ResourceNotFound: if no contact with that id exists
-          
-        
-        """
-        
-        path = 'contacts/%s.xml' % validate_id(id)
-        self.conn.delete(path)
-    
     
     def __getitem__(self, id):
         """
@@ -206,14 +217,13 @@ class Soocial(object):
         return data
         
     
-    
     def __setitem__(self, id, postdata):
         """
           
           Update the contact with the specified data.
           
           :param id: the id of the contact
-          :param id: the data to update the contact with
+          :param postdata: the data to update the contact with
           :return: a dict representing the contact
           :rtype: dict
           :raise ResourceNotFound: if no contact with that id exists
@@ -232,6 +242,19 @@ class Soocial(object):
         resp, data = self.conn.put(path, content=postdata)
         return data
     
+    def __delitem__(self, id):
+        """
+          
+          Remove the contact with the specified id.
+          
+          :param id: the id of the contact
+          :raise ResourceNotFound: if no contact with that id exists
+          
+          
+        """
+        
+        path = 'contacts/%s.xml' % validate_id(id)
+        self.conn.delete(path)
     
     def add(self, postdata):
         """
@@ -240,7 +263,7 @@ class Soocial(object):
           
           :param postdata: the data to create the new contact with
           :return: id of the created contact
-          :rtype: id
+          :rtype: string
           
           
         """
@@ -252,6 +275,94 @@ class Soocial(object):
         postdata = urlencode(data, True)
         resp, data = self.conn.post(path, content=postdata)
         return data
+    
+    def get_phones(self, id):
+        path = 'contacts/%s/telephones.xml' % id
+        resp, data = self.conn.get(path)
+        return data
+    
+    def get_emails(self, id):
+        path = 'contacts/%s/emails.xml' % id
+        resp, data = self.conn.get(path)
+        return data
+    
+    def get_urls(self, id):
+        path = 'contacts/%s/urls.xml' % id
+        resp, data = self.conn.get(path)
+        return data
+    
+    def get_addresses(self, id):
+        path = 'contacts/%s/addresses.xml' % id
+        resp, data = self.conn.get(path)
+        return data
+    
+    def get_organisations(self, id):
+        path = 'contacts/%s/organisations.xml' % id
+        resp, data = self.conn.get(path)
+        return data
+    
+    def get_user(self):
+        resp, data = self.conn.get('user.xml')
+        return data
+    
+    def get_connection_phones(self):
+        resp, data = self.conn.get('/connections/phones.xml')
+        return data
+    
+    def get_all_vcards(self, parse=True):
+        """
+          
+          Get all the contacts as a list of vcards.
+          
+          The vcards are parsed from plain text into vobject.vCard
+          form (a python wrapper class) by default.
+          
+          :param parse: set this to False to return just the raw text
+          :return: list of vcards
+          :rtype: list
+          
+          
+        """
+        
+        resp, data = self.conn.get('contacts.vcf')
+        data = data.replace('END:VCARDBEGIN:VCARD', 'END:VCARD\nBEGIN:VCARD')
+        data = data.strip()
+        vcards = []
+        while True:
+            i = data.find('END:VCARD')
+            if i > -1:
+                i += len('END:VCARD')
+                text = data[:i]
+                data = data[i:]
+                if parse:
+                    vcard = vobject.readOne(text.strip())
+                    vcards.append(vcard)
+                else:
+                    vcards.append(text.strip())
+            else: # no more left, we're done
+                break
+        return vcards
+    
+    def get_vcard(self, id, parse=True):
+        """
+          
+          Get contact vcard.
+          
+          :param id: contact id
+          :param parse: set this to False to return just the raw text
+          :return: vcard
+          :rtype: vobject.vCard or string
+          
+          
+        """
+        
+        path = 'contacts/%s.vcf' % validate_id(id)
+        resp, data = self.conn.get(path)
+        if parse:
+            vcard = vobject.readOne(data)
+        else:
+            vcard = data
+        return vcard
     
 
 
@@ -400,12 +511,10 @@ def uri(base, *path, **query):
         retval.extend(['?', unicode_urlencode(params)])
     return ''.join(retval)
 
-
 def unicode_quote(string, safe=''):
     if isinstance(string, unicode):
         string = string.encode('utf-8')
     return quote(string, safe)
-
 
 def unicode_urlencode(data, doseq=None):
     if isinstance(data, dict):
@@ -427,16 +536,10 @@ def validate_id(id):
 
 
 if __name__ == '__main__':
-    email = 'james.arthur@largeblue.com'
-    password = 'letme1n'
+    import sys
+    email = sys.args[0]
+    password = sys.args[1]
     soo = Soocial(email, password)
-    print soo.items()
-    # print soo['24276485']
-    #for item in soo:
-    #    print item
-    #print soo.add({
-    #        'first_name': 'Buddy',
-    #        'last_name': 'Holly'
-    #    }
-    #)
+    for item in soo:
+        print item
 

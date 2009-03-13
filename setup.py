@@ -19,7 +19,8 @@ setup(
     install_requires = [
         'simplejson',
         'httplib2',
-        'ElementTree'
+        'ElementTree',
+        'vobject'
     ],
     entry_points = {}
 )
