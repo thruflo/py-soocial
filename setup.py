@@ -6,7 +6,7 @@ sock.close()
 
 setup(
     name = 'py-soocial',
-    version = '0.1',
+    version = '0.2',
     description = "Python bindings for the http://www.soocial.com developer API",
     long_description = long_description,
     author = 'thruflo',
